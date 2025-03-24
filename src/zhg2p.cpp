@@ -134,7 +134,7 @@ static std::string pinyin_to_phonemes(const std::string &pinyin_initial, const s
         std::cout << apply_tone(final_phoneme, tone_nr) << std::endl;
     }
 #endif
-    std::string result = initial_phonemes[0];
+    std::string result = initial_phonemes.empty() ? "" : initial_phonemes[0];
     for (const auto &final_phoneme : final_phonemes) {
         result += apply_tone(final_phoneme, tone_nr);
     }
