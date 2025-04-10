@@ -58,6 +58,7 @@ static inline VARP _var(std::vector<T> vec, const std::vector<int> &dims) {
 
 Express::VARP Tts::generate(const std::string &text, float speed) {
     std::string phonemes = g2p_->g2p(text);
+    std::cout << phonemes << std::endl;
     auto ids = tokenizer_->encode(phonemes);
     int len = ids.size();
     ids.push_back(0);

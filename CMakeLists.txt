@@ -27,7 +27,15 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/include/
 
 # source files
 FILE(GLOB SRCS ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp
-               ${CMAKE_CURRENT_LIST_DIR}/src/cpp-pinyin/*.cpp)
+               ${CMAKE_CURRENT_LIST_DIR}/src/cpp-pinyin/*.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/chinese_converter.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/chronology.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/constants.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/num.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/phonecode.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/quantifier.cpp
+               ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/TextNormalization.cpp)
+
 add_executable(tts_demo ${SRCS})
 
 target_link_libraries(tts_demo MNN MNN_Express MNNAudio)
