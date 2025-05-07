@@ -7,7 +7,7 @@
 
 #include "zhg2p.hpp"
 #include <filesystem>
-
+#include <cpp-pinyin/ToFinal.hpp>
 namespace MNN {
 namespace Transformer {
 
@@ -55,7 +55,7 @@ static bool contains(const std::vector<std::string>& vec, const std::string& val
     return std::find(vec.begin(), vec.end(), value) != vec.end();
 }
 
-static std::string get_initials(const std::string &pinyin) {
+std::string Zhg2p::get_initials(const std::string &pinyin) {
     const std::string INITIALS[] = {
         "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h",
         "j", "q", "x", "zh", "ch", "sh", "r", "z", "c", "s"
@@ -77,89 +77,109 @@ std::string replace_all(std::string str, const std::string& from, const std::str
     return str;
 }
 
+static std::string replaceSpecialChars(const std::string& utf8_str) {
+    // 创建 UTF-8 到 wstring 的转换器
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+
+    // 将 UTF-8 string 转换为 wstring
+    std::wstring p = converter.from_bytes(utf8_str);
+
+    // 替换 chr(635) + chr(809) → "ɨ"
+    size_t pos = p.find(L"\u027B\u0329");
+    if (pos != std::wstring::npos) {
+        p.replace(pos, 2, L"ɨ");
+    }
+
+    // 替换 chr(633) + chr(809) → "ɨ"
+    pos = p.find(L"\u0279\u0329");
+    if (pos != std::wstring::npos) {
+        p.replace(pos, 2, L"ɨ");
+    }
+
+    // 将 wstring 转换回 UTF-8 string
+    return converter.to_bytes(p);
+}
+
 static std::string apply_tone(std::string variant, int tone) {
     std::vector<std::string> TONE_MAPPING = {
         "", "→", "↗", "↓", "↘", ""
     };
     auto tone_ipa = TONE_MAPPING[tone];
     auto result = replace_all(variant, "0", tone_ipa);
-    result = replace_all(result, "\u027b\u0329", "ɨ");
-    result = replace_all(result, "\u027d\u0329", "ɨ");
+    result =  replaceSpecialChars(result);
     return result;
 }
 
 
-static std::string pinyin_to_phonemes(const std::string &pinyin_initial, const std::string &pinyin_final, int tone_nr) {
-    std::map<std::string, std::vector<std::string>> INITIAL_MAPPING = {
-        {"b", {"p"}}, {"c", {"ʦʰ"}}, {"ch", {"\uAB67ʰ"}}, {"d", {"t"}}, {"f", {"f"}},
-        {"g", {"k"}}, {"h", {"x", "h"}}, {"j", {"ʨ"}}, {"k", {"kʰ"}}, {"l", {"l"}},
-        {"m", {"m"}}, {"n", {"n"}}, {"p", {"pʰ"}}, {"q", {"ʨʰ"}}, {"r", {"ɻ", "ʐ"}},
-        {"s", {"s"}}, {"sh", {"ʂ"}}, {"t", {"tʰ"}}, {"x", {"ɕ"}}, {"z", {"ʦ"}}, {"zh", {"\uAB67"}}
-    };
-    std::map<std::string, std::vector<std::string>> FINAL_MAPPING = {
-        {"a", {"a0"}}, {"ai", {"ai̯0"}}, {"an", {"a0", "n"}}, {"ang", {"a0", "ŋ"}}, {"ao", {"au̯0"}},
-        {"e", {"ɤ0"}}, {"ei", {"ei̯0"}}, {"en", {"ə0", "n"}}, {"eng", {"ə0", "ŋ"}}, {"i", {"i0"}},
-        {"ia", {"j", "a0"}}, {"ian", {"j", "ɛ0", "n"}}, {"iang", {"j", "a0", "ŋ"}}, {"iao", {"j", "au̯0"}},
-        {"ie", {"j", "e0"}}, {"in", {"i0", "n"}}, {"iou", {"j", "ou̯0"}}, {"ing", {"i0", "ŋ"}},
-        {"iong", {"j", "ʊ0", "ŋ"}}, {"ong", {"ʊ0", "ŋ"}}, {"ou", {"ou̯0"}}, {"u", {"u0"}}, {"uei", {"w", "ei̯0"}},
-        {"ua", {"w", "a0"}}, {"uai", {"w", "ai̯0"}}, {"uan", {"w", "a0", "n"}}, {"uen", {"w", "ə0", "n"}},
-        {"uang", {"w", "a0", "ŋ"}}, {"ueng", {"w", "ə0", "ŋ"}}, {"uo", {"w", "o0"}}, {"o", {"w", "o0"}},
-        {"ü", {"y0"}}, {"üe", {"ɥ", "e0"}}, {"üan", {"ɥ", "ɛ0", "n"}}, {"ün", {"y0", "n"}}
-    };
-    std::vector<std::string> ZH_CH_SH_R = {"zh", "ch", "sh", "r"};
-    std::vector<std::string> Z_C_S = {"z", "c", "s"};
-    // std::vector<std::string> FINAL_MAPPING_AFTER_ZH_CH_SH_R = {"ɻ̩0", "ʐ̩0"};
-    // std::vector<std::string> FINAL_MAPPING_AFTER_Z_C_S = {"ɹ̩0", "z̩0"};
-    std::vector<std::string> FINAL_MAPPING_AFTER_ZH_CH_SH_R = {"ɻ̩0"};
-    std::vector<std::string> FINAL_MAPPING_AFTER_Z_C_S = {"ɹ̩0"};
-    std::vector<std::string> phonemes;
+std::string Zhg2p::pinyin_to_phonemes(const std::string &pinyin_normal,  const std::string &pinyin_initial, const std::string &pinyin_final, int tone_nr) {
+    std::vector<std::vector<std::string>> part;
     std::vector<std::string> initial_phonemes, final_phonemes;
-    if (pinyin_initial != "") {
-        initial_phonemes = INITIAL_MAPPING[pinyin_initial];
+
+    if (INTERJECTION_MAPPINGS.find(pinyin_normal) != INTERJECTION_MAPPINGS.end()) {
+        // Key 存在
+       auto interjection_ipa_mapping = INTERJECTION_MAPPINGS[pinyin_normal];
+         auto interjection_ipa = apply_tone(interjection_ipa_mapping.front(), tone_nr);
+          return interjection_ipa;
     }
+
+    if (SYLLABIC_CONSONANT_MAPPINGS.find(pinyin_normal) != SYLLABIC_CONSONANT_MAPPINGS.end()) {
+        // Key 存在
+        auto syllabic_consonant_ipa_mapping = SYLLABIC_CONSONANT_MAPPINGS[pinyin_normal];
+        auto syllabic_consonant_ipa = apply_tone(syllabic_consonant_ipa_mapping.front(), tone_nr);
+        return syllabic_consonant_ipa;
+    }
+
+    if (!pinyin_initial.empty()) {
+        initial_phonemes = INITIAL_MAPPING[pinyin_initial];
+        // part.emplace_back(initial_phonemes);
+    }
+
+     bool is_special = false;
     if (contains(ZH_CH_SH_R, pinyin_initial) && pinyin_final == "i") {
         final_phonemes = FINAL_MAPPING_AFTER_ZH_CH_SH_R;
+        is_special = true;
     } else if (contains(Z_C_S, pinyin_initial) && pinyin_final == "i") {
         final_phonemes = FINAL_MAPPING_AFTER_Z_C_S;
+        is_special = true;
     } else {
         final_phonemes = FINAL_MAPPING[pinyin_final];
     }
-#if 0
-    // dump initial_phonemes, final_phonemes
-    for (const auto &initial_phoneme : initial_phonemes) {
-        std::cout << initial_phoneme << std::endl;
-    }
-    std::cout << "###" << std::endl;
-    for (const auto &final_phoneme : final_phonemes) {
-        std::cout << apply_tone(final_phoneme, tone_nr) << std::endl;
-    }
-#endif
+
     std::string result = initial_phonemes.empty() ? "" : initial_phonemes[0];
-    for (const auto &final_phoneme : final_phonemes) {
-        result += apply_tone(final_phoneme, tone_nr);
+    if (is_special) {
+        std::vector<std::string> final_phonemes_t;
+        final_phonemes_t.reserve(final_phonemes.size());
+        for (const auto &final_phoneme : final_phonemes) {
+            final_phonemes_t.emplace_back(apply_tone(final_phoneme, tone_nr));
+        }
+        result += final_phonemes_t.front();
     }
+    else {
+        for (const auto &final_phoneme : final_phonemes) {
+            result += apply_tone(final_phoneme, tone_nr);
+        }
+    }
+
+
     return result;
 }
 
-static std::string convert_final(std::string final) {
-    // TODO: convert final
-    // convert_zero_consonant
-    // convert_uv
-    // convert_iou
-    // convert_uei
-    // convert_uen
-    return final;
+std::string Zhg2p::get_finals(const std::string& pinyin_normal) {
+    // return pinyin_to_finals(pinyin_normal);
+
+    return  pinyin_normal.substr(0, pinyin_normal.size() - 1);
 }
 
 std::string Zhg2p::pinyin_to_ipa(const std::string &pinyin) {
     // get_tone
     int tone_nr = pinyin.at(pinyin.size() - 1) - '0';
     std::string py = pinyin.substr(0, pinyin.size() - 1);
+    py = pinyin_to_finals(py);
     // get_initials
     std::string pinyin_initial = get_initials(py);
-    std::string pinyin_final = convert_final(py.substr(pinyin_initial.size()));
+    std::string pinyin_final = py.substr(pinyin_initial.size());
     // std::cout << pinyin << " # " << pinyin_initial << " # " << pinyin_final << " # " << tone_nr << std::endl;
-    auto phonemes = pinyin_to_phonemes(pinyin_initial, pinyin_final, tone_nr);
+    auto phonemes = pinyin_to_phonemes(py, pinyin_initial, pinyin_final, tone_nr);
     return phonemes;
 }
 
@@ -194,7 +214,8 @@ std::string Zhg2p::g2p(const std::string &text) {
     if (text.empty()) {
         return "";
     }
-    std::string preprocessedText = preprocess(text);
+    auto normalized_text = TextNormalizer::normalize_sentence(text);
+    std::string preprocessedText = preprocess(normalized_text);
 
     std::regex reg(u8"([\u4E00-\u9FFF]+|[^\u4E00-\u9FFF]+)");
     std::regex zh_regex(u8"[\u4E00-\u9FFF]+");

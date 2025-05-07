@@ -19,15 +19,16 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/MNN)
 
 # include dir
 include_directories(${CMAKE_CURRENT_LIST_DIR}/include/
-                    ${CMAKE_CURRENT_LIST_DIR}/src/3rd_include/
-                    ${CMAKE_CURRENT_LIST_DIR}/MNN/include/
-                    ${CMAKE_CURRENT_LIST_DIR}/MNN/3rd_party/
-                    ${CMAKE_CURRENT_LIST_DIR}/MNN/tools/audio/include/
-                    )
+        ${CMAKE_CURRENT_LIST_DIR}/src/3rd_include/
+        ${CMAKE_CURRENT_LIST_DIR}/MNN/include/
+        ${CMAKE_CURRENT_LIST_DIR}/MNN/3rd_party/
+        ${CMAKE_CURRENT_LIST_DIR}/MNN/tools/audio/include/
+)
 
 # source files
 FILE(GLOB SRCS ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp
-               ${CMAKE_CURRENT_LIST_DIR}/src/cpp-pinyin/*.cpp)
+        ${CMAKE_CURRENT_LIST_DIR}/src/cpp-pinyin/*.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/zh_normalization/*.cpp)
 add_executable(tts_demo ${SRCS})
 
 target_link_libraries(tts_demo MNN MNN_Express MNNAudio)
